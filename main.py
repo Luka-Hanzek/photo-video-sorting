@@ -3,7 +3,6 @@ import argparse
 import exiftool
 import datetime
 import shutil
-import dateutil
 import itertools
 
 
