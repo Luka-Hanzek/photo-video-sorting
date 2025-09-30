@@ -70,6 +70,8 @@ if __name__ == "__main__":
     for dirpath, dirnames, filenames in os.walk(args.src):
         for filename in filenames:
             full_path = os.path.join(dirpath, filename)
+            if not os.path.exists(full_path):
+                continue
 
             if filename.lower().endswith(".mp4") or filename.lower().endswith(".mov"):
                 create_date = get_creation_date(full_path)
@@ -90,7 +92,12 @@ if __name__ == "__main__":
                 # Copy the media
                 print(f"Moving {filename}")
                 copy_or_move(full_path, os.path.join(dest_folder, filename))
-            elif filename.lower().endswith(".jpg") or filename.lower().endswith(".png") or filename.lower().endswith(".tif"):
+            elif (filename.lower().endswith(".jpg")
+                    or filename.lower().endswith(".png")
+                    or filename.lower().endswith(".tif")
+                    or filename.lower().endswith(".arw")
+                    or filename.lower().endswith(".dng")
+                    ):
                 create_date = get_creation_date(full_path)
                 if create_date is None:
                     print(f"Couldn't get creation date for file: {full_path}")
@@ -107,13 +114,14 @@ if __name__ == "__main__":
 
                 # Copy the media
                 print(f"Moving {filename}")
+
                 copy_or_move(full_path, os.path.join(dest_folder, filename))
 
                 # Also copy other extensions
                 extensions_to_check = [
                     "xmp",
                     "dng",
-                    "arw"
+                    "arw",
                 ]
                 extensions_to_check.extend([ext.upper() for ext in extensions_to_check])
 
@@ -126,43 +134,6 @@ if __name__ == "__main__":
                         copy_or_move(
                             full_path, os.path.join(dest_folder, os.path.basename(full_path))
                         )
-
-            elif filename.lower().endswith(".dng"):
-                create_date = get_creation_date(full_path)
-                if create_date is None:
-                    print(f"Couldn't get creation date for file: {full_path}")
-            
-                # Destination directory name
-                if create_date is not None:
-                    folder_name = create_date.strftime('%Y-%m-%d')
-                else:
-                    folder_name = "no-date"
-                dest_folder = os.path.join(args.dest, "image", folder_name)
-                    
-                # Ensure destination directory exists
-                os.makedirs(dest_folder, exist_ok=True)
-
-                # Copy the media
-                print(f"Moving {filename}")
-                copy_or_move(full_path, os.path.join(dest_folder, filename))
-            elif filename.lower().endswith(".arw"):
-                create_date = get_creation_date(full_path)
-                if create_date is None:
-                    print(f"Couldn't get creation date for file: {full_path}")
-            
-                # Destination directory name
-                if create_date is not None:
-                    folder_name = create_date.strftime('%Y-%m-%d')
-                else:
-                    folder_name = "no-date"
-                dest_folder = os.path.join(args.dest, "image", folder_name)
-                    
-                # Ensure destination directory exists
-                os.makedirs(dest_folder, exist_ok=True)
-
-                # Copy the media
-                print(f"Moving {filename}")
-                copy_or_move(full_path, os.path.join(dest_folder, filename))
             else:
                 print(f"Unknown extension for file: {full_path}\n\tSkipping...")
                 with open(os.path.join(LOGS_DIRECTORY, script_run_timestamp, "skipped"), "a") as f:
