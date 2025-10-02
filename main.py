@@ -40,7 +40,10 @@ def get_creation_date(file_path: str):
         date_format = f"%Y:%m:%d %H:%M:%S%z"
     else:
         date_format = "%Y:%m:%d %H:%M:%S"
-    date = datetime.datetime.strptime(create_date_str, date_format)
+    try:
+        date = datetime.datetime.strptime(create_date_str, date_format)
+    except ValueError:
+        return None
     return date
 
 
