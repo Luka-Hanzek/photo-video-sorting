@@ -100,6 +100,7 @@ if __name__ == "__main__":
                     or filename.lower().endswith(".tif")
                     or filename.lower().endswith(".arw")
                     or filename.lower().endswith(".dng")
+                    or filename.lower().endswith(".jpeg")
                     ):
                 create_date = get_creation_date(full_path)
                 if create_date is None:
