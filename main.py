@@ -47,21 +47,20 @@ def get_creation_date(file_path: str):
     return date
 
 
-class StoreMoveFlag(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        if values == "False":
-            setattr(namespace, self.dest, False)
-        elif values == "True":
-            setattr(namespace, self.dest, True)
-        else:
-            raise ValueError("Invalid f'{option_string}' value.")
+def validate_move_arg(arg) -> bool:
+    if arg == "False":
+        return False
+    elif arg == "True":
+        return True
+    else:
+        raise ValueError("Invalid \"--move\" value.")
 
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--src", required=True)
     arg_parser.add_argument("--dest", required=True)
-    arg_parser.add_argument("--move", default=False, action=StoreMoveFlag)
+    arg_parser.add_argument("--move", default=False, action="store_true")
 
     args = arg_parser.parse_args()
 
