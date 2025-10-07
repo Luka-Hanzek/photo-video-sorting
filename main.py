@@ -30,7 +30,7 @@ def get_creation_date(file_path: str):
         if tag == key:
             create_date_str = metadata[key]
             break
-        
+
     if create_date_str is None:
         return None
 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
                 create_date = get_creation_date(full_path)
                 if create_date is None:
                     print(f"Couldn't get creation date for file: {full_path}")
-                    
+
 
                 # Destination directory name
                 if create_date is not None:
@@ -104,14 +104,14 @@ if __name__ == "__main__":
                 create_date = get_creation_date(full_path)
                 if create_date is None:
                     print(f"Couldn't get creation date for file: {full_path}")
-            
+
                 # Destination directory name
                 if create_date is not None:
                     folder_name = create_date.strftime('%Y-%m-%d')
                 else:
                     folder_name = "no-date"
                 dest_folder = os.path.join(args.dest, "image", folder_name)
-                    
+
                 # Ensure destination directory exists
                 os.makedirs(dest_folder, exist_ok=True)
 
