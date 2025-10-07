@@ -52,7 +52,7 @@ def validate_move_arg(arg) -> bool:
     else:
         raise ValueError("Invalid \"--move\" value.")
 
-def iter_files(dir_path: str) -> dict:
+def get_files(dir_path: str) -> dict:
     all_file_paths = []
     for dirpath, dirnames, filenames in os.walk(dir_path):
         for filename in filenames:
@@ -71,8 +71,7 @@ def iter_files(dir_path: str) -> dict:
 
     files = {}
     for file_path, metadata in zip(all_file_paths, files_metadata):
-        if "File:MIMEType" in metadata:
-            files[file_path] = metadata
+        files[file_path] = metadata
 
     return files
 
@@ -89,12 +88,15 @@ if __name__ == "__main__":
 
     os.makedirs(args.dest, exist_ok=True)
 
-    for file_path, metadata in iter_files(args.src).items():
+    files_with_metadata = get_files(args.src)
+    files_to_move = {}
+
+    for file_path, metadata in files_with_metadata.items():
         # Some files could no longer exists because related files have been also moved.
         if not os.path.exists(file_path):
             continue
 
-        if metadata["File:MIMEType"].startswith("video"):
+        if metadata.get("File:MIMEType", "").startswith("video"):
             file_name = os.path.basename(file_path)
             create_date = get_creation_date(metadata=metadata)
             if create_date is None:
@@ -106,14 +108,11 @@ if __name__ == "__main__":
             else:
                 folder_name = "no-date"
             dest_folder = os.path.join(args.dest, "video", folder_name)
-
-            # Ensure destination directory exists
-            os.makedirs(dest_folder, exist_ok=True)
-
-            # Copy the media
-            print(f"Moving {file_path}")
-            copy_or_move(file_path, os.path.join(dest_folder, file_name))
-        elif metadata["File:MIMEType"].startswith("image"):
+            files_to_move[file_path] = os.path.join(dest_folder, file_name)
+        elif (
+                metadata.get("File:MIMEType", "").startswith("image")
+                and metadata.get("File:FileTypeExtension", "").lower() in ("jpg", "jpeg", "arw", "png", "tiff")
+            ):
             file_name = os.path.basename(file_path)
             create_date = get_creation_date(metadata=metadata)
             if create_date is None:
@@ -125,14 +124,7 @@ if __name__ == "__main__":
             else:
                 folder_name = "no-date"
             dest_folder = os.path.join(args.dest, "image", folder_name)
-
-            # Ensure destination directory exists
-            os.makedirs(dest_folder, exist_ok=True)
-
-            # Copy the media
-            print(f"Moving {file_path}")
-
-            copy_or_move(file_path, os.path.join(dest_folder, file_name))
+            files_to_move[file_path] = os.path.join(dest_folder, file_name)
 
             # Also copy other extensions
             extensions_to_check = [
@@ -142,18 +134,29 @@ if __name__ == "__main__":
             ]
             extensions_to_check.extend([ext.upper() for ext in extensions_to_check])
 
-
             ext_paths = [f"{os.path.splitext(file_path)[0]}.{ext}" for ext in extensions_to_check]
             ext_paths.extend([f"{file_path}.{ext}" for ext in extensions_to_check])
 
             for ext_path in ext_paths:
                 if os.path.exists(ext_path):
-                    print(f"Moving {ext_path}")
-                    copy_or_move(
-                        ext_path, os.path.join(dest_folder, os.path.basename(ext_path))
-                    )
-        else:
-            print(f"Unknown extension for file: {file_path}\n\tSkipping...")
-            os.makedirs(os.path.join(LOGS_DIRECTORY, script_run_timestamp), exist_ok=True)
+                    files_to_move[ext_path] = os.path.join(dest_folder, os.path.basename(ext_path))
+
+    for file_path, dest in files_to_move.items():
+        # Ensure destination directory exists
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+        # Copy the media
+        print(f"{'Moving' if args.move else 'Copying'} {file_path}")
+        copy_or_move(file_path, dest)
+    
+    unknown_files = set(files_with_metadata.keys()).difference(set(files_to_move.keys()))
+
+    if unknown_files:
+        os.makedirs(os.path.join(LOGS_DIRECTORY, script_run_timestamp), exist_ok=True)
+
+        print("Skipped files:")
+        for file_path in unknown_files:
+            print(f"Unknown file: {file_path}")
+            
             with open(os.path.join(LOGS_DIRECTORY, script_run_timestamp, "skipped"), "a") as f:
                 print(file_path, file=f)
