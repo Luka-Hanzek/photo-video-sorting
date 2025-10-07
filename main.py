@@ -3,14 +3,14 @@ import argparse
 import exiftool
 import datetime
 import shutil
-import itertools
+import typing
 
 
 LOGS_DIRECTORY = "logs"
 script_run_timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 
-def get_creation_date(file_path: str):
+def get_creation_date(*, metadata: dict = None, file_path: str = None) -> typing.Optional[datetime.date]:
     POSSIBLE_TAGS = (
         "EXIF:CreateDate",
         "EXIF:DateTimeOriginal",
@@ -18,33 +18,30 @@ def get_creation_date(file_path: str):
         "QuickTime:MediaCreateDate",
     )
 
-    metadata = None
-    with exiftool.ExifToolHelper() as et:
-        try:
-            metadata = et.get_metadata(file_path)[0]
-        except (TypeError, exiftool.exceptions.ExifToolExecuteError):
-            return None
+    if metadata is None and file_path is None:
+        raise ValueError("Supply at least one argument.")
+
+    if metadata is None:
+        with exiftool.ExifToolHelper() as et:
+            try:
+                metadata = et.get_metadata(file_path)[0]
+            except (TypeError, exiftool.exceptions.ExifToolExecuteError):
+                return None
+    if metadata is None:
+        return None
 
     create_date_str = None
-    for tag, key in itertools.product(POSSIBLE_TAGS, metadata.keys()):
-        if tag == key:
-            create_date_str = metadata[key]
+    for possible_tag in POSSIBLE_TAGS:
+        if possible_tag in metadata:
+            create_date_str = metadata[possible_tag]
             break
 
     if create_date_str is None:
         return None
 
-    if "+" in create_date_str or "-" in create_date_str:
-        if create_date_str[-3] == ':':
-            create_date_str = create_date_str[:-3] + create_date_str[-2:]
-        date_format = f"%Y:%m:%d %H:%M:%S%z"
-    else:
-        date_format = "%Y:%m:%d %H:%M:%S"
-    try:
-        date = datetime.datetime.strptime(create_date_str, date_format)
-    except ValueError:
-        return None
-    return date
+    date_format = "%Y:%m:%d %H:%M:%S"
+
+    return datetime.datetime.strptime(create_date_str, date_format)
 
 
 def validate_move_arg(arg) -> bool:
@@ -54,6 +51,30 @@ def validate_move_arg(arg) -> bool:
         return True
     else:
         raise ValueError("Invalid \"--move\" value.")
+
+def iter_files(dir_path: str) -> dict:
+    all_file_paths = []
+    for dirpath, dirnames, filenames in os.walk(dir_path):
+        for filename in filenames:
+            full_path = os.path.join(dirpath, filename)
+            if not os.path.exists(full_path):
+                continue
+            else:
+                all_file_paths.append(full_path)
+
+    files_metadata = []
+    try:
+        with exiftool.ExifTool() as et:
+            files_metadata = et.execute_json(*all_file_paths)
+    except exiftool.exceptions.ExifToolExecuteError:
+        pass
+
+    files = {}
+    for file_path, metadata in zip(all_file_paths, files_metadata):
+        if "File:MIMEType" in metadata:
+            files[file_path] = metadata
+
+    return files
 
 
 if __name__ == "__main__":
@@ -68,76 +89,71 @@ if __name__ == "__main__":
 
     os.makedirs(args.dest, exist_ok=True)
 
-    for dirpath, dirnames, filenames in os.walk(args.src):
-        for filename in filenames:
-            full_path = os.path.join(dirpath, filename)
-            if not os.path.exists(full_path):
-                continue
+    for file_path, metadata in iter_files(args.src).items():
+        # Some files could no longer exists because related files have been also moved.
+        if not os.path.exists(file_path):
+            continue
 
-            if filename.lower().endswith(".mp4") or filename.lower().endswith(".mov"):
-                create_date = get_creation_date(full_path)
-                if create_date is None:
-                    print(f"Couldn't get creation date for file: {full_path}")
+        if metadata["File:MIMEType"].startswith("video"):
+            file_name = os.path.basename(file_path)
+            create_date = get_creation_date(metadata=metadata)
+            if create_date is None:
+                print(f"Couldn't get creation date for file: {file_path}")
 
-
-                # Destination directory name
-                if create_date is not None:
-                    folder_name = create_date.strftime('%Y-%m-%d')
-                else:
-                    folder_name = "no-date"
-                dest_folder = os.path.join(args.dest, "video", folder_name)
-
-                # Ensure destination directory exists
-                os.makedirs(dest_folder, exist_ok=True)
-
-                # Copy the media
-                print(f"Moving {filename}")
-                copy_or_move(full_path, os.path.join(dest_folder, filename))
-            elif (filename.lower().endswith(".jpg")
-                    or filename.lower().endswith(".png")
-                    or filename.lower().endswith(".tif")
-                    or filename.lower().endswith(".arw")
-                    or filename.lower().endswith(".dng")
-                    or filename.lower().endswith(".jpeg")
-                    ):
-                create_date = get_creation_date(full_path)
-                if create_date is None:
-                    print(f"Couldn't get creation date for file: {full_path}")
-
-                # Destination directory name
-                if create_date is not None:
-                    folder_name = create_date.strftime('%Y-%m-%d')
-                else:
-                    folder_name = "no-date"
-                dest_folder = os.path.join(args.dest, "image", folder_name)
-
-                # Ensure destination directory exists
-                os.makedirs(dest_folder, exist_ok=True)
-
-                # Copy the media
-                print(f"Moving {filename}")
-
-                copy_or_move(full_path, os.path.join(dest_folder, filename))
-
-                # Also copy other extensions
-                extensions_to_check = [
-                    "xmp",
-                    "dng",
-                    "arw",
-                ]
-                extensions_to_check.extend([ext.upper() for ext in extensions_to_check])
-
-                full_paths = [f"{os.path.splitext(full_path)[0]}.{ext}" for ext in extensions_to_check]
-                full_paths.extend([f"{full_path}.{ext}" for ext in extensions_to_check])
-
-                for full_path in full_paths:
-                    if os.path.exists(full_path):
-                        print(f"Moving {full_path}")
-                        copy_or_move(
-                            full_path, os.path.join(dest_folder, os.path.basename(full_path))
-                        )
+            # Destination directory name
+            if create_date is not None:
+                folder_name = create_date.strftime('%Y-%m-%d')
             else:
-                print(f"Unknown extension for file: {full_path}\n\tSkipping...")
-                os.makedirs(os.path.join(LOGS_DIRECTORY, script_run_timestamp), exist_ok=True)
-                with open(os.path.join(LOGS_DIRECTORY, script_run_timestamp, "skipped"), "a") as f:
-                    print(full_path, file=f)
+                folder_name = "no-date"
+            dest_folder = os.path.join(args.dest, "video", folder_name)
+
+            # Ensure destination directory exists
+            os.makedirs(dest_folder, exist_ok=True)
+
+            # Copy the media
+            print(f"Moving {file_path}")
+            copy_or_move(file_path, os.path.join(dest_folder, file_name))
+        elif metadata["File:MIMEType"].startswith("image"):
+            file_name = os.path.basename(file_path)
+            create_date = get_creation_date(metadata=metadata)
+            if create_date is None:
+                print(f"Couldn't get creation date for file: {file_path}")
+
+            # Destination directory name
+            if create_date is not None:
+                folder_name = create_date.strftime('%Y-%m-%d')
+            else:
+                folder_name = "no-date"
+            dest_folder = os.path.join(args.dest, "image", folder_name)
+
+            # Ensure destination directory exists
+            os.makedirs(dest_folder, exist_ok=True)
+
+            # Copy the media
+            print(f"Moving {file_path}")
+
+            copy_or_move(file_path, os.path.join(dest_folder, file_name))
+
+            # Also copy other extensions
+            extensions_to_check = [
+                "xmp",
+                "dng",
+                "arw",
+            ]
+            extensions_to_check.extend([ext.upper() for ext in extensions_to_check])
+
+
+            ext_paths = [f"{os.path.splitext(file_path)[0]}.{ext}" for ext in extensions_to_check]
+            ext_paths.extend([f"{file_path}.{ext}" for ext in extensions_to_check])
+
+            for ext_path in ext_paths:
+                if os.path.exists(ext_path):
+                    print(f"Moving {ext_path}")
+                    copy_or_move(
+                        ext_path, os.path.join(dest_folder, os.path.basename(ext_path))
+                    )
+        else:
+            print(f"Unknown extension for file: {file_path}\n\tSkipping...")
+            os.makedirs(os.path.join(LOGS_DIRECTORY, script_run_timestamp), exist_ok=True)
+            with open(os.path.join(LOGS_DIRECTORY, script_run_timestamp, "skipped"), "a") as f:
+                print(file_path, file=f)
