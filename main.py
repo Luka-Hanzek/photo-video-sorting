@@ -67,7 +67,6 @@ if __name__ == "__main__":
     copy_or_move = shutil.move if args.move else shutil.copy
 
     os.makedirs(args.dest, exist_ok=True)
-    os.makedirs(os.path.join(LOGS_DIRECTORY, script_run_timestamp), exist_ok=True)
 
     for dirpath, dirnames, filenames in os.walk(args.src):
         for filename in filenames:
@@ -139,5 +138,6 @@ if __name__ == "__main__":
                         )
             else:
                 print(f"Unknown extension for file: {full_path}\n\tSkipping...")
+                os.makedirs(os.path.join(LOGS_DIRECTORY, script_run_timestamp), exist_ok=True)
                 with open(os.path.join(LOGS_DIRECTORY, script_run_timestamp, "skipped"), "a") as f:
                     print(full_path, file=f)
