@@ -52,15 +52,13 @@ def validate_move_arg(arg) -> bool:
     else:
         raise ValueError("Invalid \"--move\" value.")
 
+
 def get_files(dir_path: str) -> dict:
     all_file_paths = []
     for dirpath, dirnames, filenames in os.walk(dir_path):
         for filename in filenames:
             full_path = os.path.join(dirpath, filename)
-            if not os.path.exists(full_path):
-                continue
-            else:
-                all_file_paths.append(full_path)
+            all_file_paths.append(full_path)
 
     files_metadata = []
     try:
@@ -137,17 +135,23 @@ if __name__ == "__main__":
             ext_paths = [f"{os.path.splitext(file_path)[0]}.{ext}" for ext in extensions_to_check]
             ext_paths.extend([f"{file_path}.{ext}" for ext in extensions_to_check])
 
+            ext_path_dir = os.path.dirname(file_path)
+            potential_files = {os.path.join(ext_path_dir, filename) for filename in os.listdir(ext_path_dir)}
+
             for ext_path in ext_paths:
-                if os.path.exists(ext_path):
+                if ext_path in potential_files:
                     files_to_move[ext_path] = os.path.join(dest_folder, os.path.basename(ext_path))
 
     for file_path, dest in files_to_move.items():
         # Ensure destination directory exists
         os.makedirs(os.path.dirname(dest), exist_ok=True)
 
-        # Copy the media
-        print(f"{'Moving' if args.move else 'Copying'} {file_path}")
-        copy_or_move(file_path, dest)
+        if os.path.exists(dest):
+            print(f"{file_path} already exists.")
+        else:
+            # Copy the media
+            print(f"{'Moving' if args.move else 'Copying'} {file_path}")
+            copy_or_move(file_path, dest)
     
     unknown_files = set(files_with_metadata.keys()).difference(set(files_to_move.keys()))
 
